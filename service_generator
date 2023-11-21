@@ -103,37 +103,8 @@ RESET="$(echo -en '\e[0m')"
 # FZF default confiuration
 export FZF_DEFAULT_OPTS='--color=fg:#f8f8f2,bg:#282a36,hl:#bd93f9 --color=fg+:#f8f8f2,bg+:#44475a,hl+:#bd93f9 --color=info:#ffb86c,prompt:#50fa7b,pointer:#ff79c6 --color=marker:#ff79c6,spinner:#ffb86c,header:#6272a4 --cycle --marker=x --height=50%'
 
-# ask the user to copy an exist service file or create a new one
-# ask the user for the new service name and if copied suggest the copied name
-# make sure no service with the same name already exists
-
-# Show menu contains edit values, save to a file, install service, exit
-# open menu containing the supported sections e.g. Unit, Service and Install
-# By selecting a section the user can edit the values for that section
-# Some values can suggest a default value
+# modes
 #
-# At the end one the user selects save to file all values are saved to a file
-# By selecting install the values are written to a file and installed as a service
-
-
-# # Check to load an existing service
-# read -p "Copy an installed service? (y/N)> " -r copy_service
-# if [[ $copy_service =~ ^[Yy]$ ]]; then
-#     copy_service=$(ls -1 /etc/systemd/system/*.service \
-#         | fzf -e --header="Select service file" --preview 'cat {}')
-#     if [ -z "$copy_service" ]; then
-#         display_error "No service file selected. Exiting."
-#     fi
-#     
-#     # ask new service name
-#     read -p "Enter new service name ($(basename "${copy_service%.service}")): " -r service_name
-#     if [ -z "$service_name" ]; then
-#         service_name=$(basename "${copy_service%.service}")
-#     fi
-#     # !TODO: Load service file and start working on it
-# else
-#     read -p "Enter new service name: " -r service_name
-# fi
 #
 
 create_service() {
@@ -258,11 +229,24 @@ remove_service() {
     done
 }
 
+edit_service() {
+    service=$(systemctl list-units --type=service --all --plain --no-legend \
+        | fzf -e --header "Select service to edit" --prompt "Service: " \
+        | awk '{print $1}')
+    if [ -z "$service" ]; then
+        display_warning "No service selected."
+        exit 1
+    fi
+    sudo vim "/etc/systemd/system/$service"
+    sudo systemctl daemon-reload
+    display_success "Service $service edited successfully."
+}
+
 # Main Script
 
 while true; do
     echo -e "${GREEN}Choose action${MAGENTA}"
-    select choice in "create service" "remove service/s" "exit"; do
+    select choice in "create service" "remove service/s" "edit service" "exit"; do
         echo -e "${RESET}"
         case $choice in
             "create service")
@@ -271,6 +255,10 @@ while true; do
                 ;;
             "remove service/s")
                 remove_service
+                break
+                ;;
+            "edit service")
+                edit_service
                 break
                 ;;
             exit)
