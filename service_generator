@@ -36,17 +36,6 @@ display_info() {
 		echo -e "${BLUE}INFO:${WHITE} $1${NC}"
 }
 
-write_to_file() {
-    local useSUDO="$1"
-    local filename="$2"
-
-    if [ "$useSUDO" -eq 1 ]; then
-        sudo tee "$filename"
-    else
-        tee "$filename"
-    fi
-}
-
 # check required tools are installed
 required_tools=("fzf" "tput" "getent" "vim")
 for tool in "${required_tools[@]}"; do
