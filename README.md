@@ -37,6 +37,6 @@ The script has 3 modes:
 
 ![Overall script output in create mode](screens/screen1.png)
 
-- How using fzf to select some fields with suggested answers
+- How using fzf to select suggested answers for some fields.
 
-![How using fzf to select some fields with suggested answers](screens/screen2.png)
+![How using fzf to select suggested answers for some fields]screens/screen2.png)
