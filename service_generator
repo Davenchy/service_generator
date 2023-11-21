@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# This script will generate a systemd service file
+# Dracula Theme is used: https://draculatheme.com/
+
+# reset terminal
+reset
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+WHITE='\033[0;37m'
+NC='\033[0m' # No Color
+
+# define display and write functions
+
+# Function to display an error message and exit
+display_error() {
+    echo -e "${RED}Error: $1${NC}"
+    [ -z "$2" ] && exit 1
+}
+
+# Function to display a success message
+display_success() {
+    echo -e "${GREEN}Success:${WHITE} $1${NC}"
+}
+
+# Function to display a warning message
+display_warning() {
+		echo -e "${YELLOW}WARNING:${WHITE} $1${NC}"
+}
+
+# Function to display an info message
+display_info() {
+		echo -e "${BLUE}INFO:${WHITE} $1${NC}"
+}
+
+write_to_file() {
+    local useSUDO="$1"
+    local filename="$2"
+
+    if [ "$useSUDO" -eq 1 ]; then
+        sudo tee "$filename"
+    else
+        tee "$filename"
+    fi
+}
+
+# check required tools are installed
+required_tools=("fzf" "tput" "getent" "vim")
+for tool in "${required_tools[@]}"; do
+    [ -z "$(command -v "$tool")" ] \
+        && display_error "$tool is not installed, please install it."
+done
+
+# color function to define color with fallback values
+# check below defined colors for more examples
+color() {
+	local color_ansi="$1"
+	local color_8bit="$2"
+	local color_24bit="$3"
+	local code="\e[3"
+
+	if [ "$(tput colors)" -eq 8 ]; then
+		echo -ne "${code}8;5;${color_8bit}m"
+	elif [ "$(tput colors)" -eq 256 ]; then
+		echo -ne "${code}8;2;${color_24bit}m"
+	else
+		local color=7 # white by default
+		case "$color_ansi" in
+			black) color=0 ;;
+			red) color=1 ;;
+			green) color=2 ;;
+			yellow) color=3 ;;
+			blue) color=4 ;;
+			magenta) color=5 ;;
+			cyan) color=6 ;;
+			white) color=7 ;;
+		esac
+		echo -ne "${code}${color}m"
+	fi
+}
+
+# convert hex color to decimal so it can be used
+# Example: color_hex2dec 0xff 0x00 0x00 -> 255;0;0
+color_hex2dec() {
+	printf "%d;%d;%d" "$1" "$2" "$3"
+}
+
+# Redfine colors to use Dracula Theme and the fallback colors if not supported
+# https://draculatheme.com
+RED="$(color red 196 "$(color_hex2dec 0xEA 0x51 0xB2)")"
+GREEN="$(color green 83 "$(color_hex2dec 0x00 0xF7 0x69)")"
+YELLOW="$(color yellow 227 "$(color_hex2dec 0xEB 0xFF 0x87)")"
+BLUE="$(color blue 111 "$(color_hex2dec 0x62 0xD6 0xE8)")"
+MAGENTA="$(color magenta 200 "$(color_hex2dec 0xB4 0x5B 0xCF)")"
+CYAN="$(color cyan 45 "$(color_hex2dec 0x62 0xD6 0xE8)")"
+WHITE="$(color white 231 "$(color_hex2dec 0xE9 0xE9 0xF4)")"
+NC="$(echo -en '\e[0m')"
+RESET="$(echo -en '\e[0m')"
+
+# FZF default confiuration
+export FZF_DEFAULT_OPTS='--color=fg:#f8f8f2,bg:#282a36,hl:#bd93f9 --color=fg+:#f8f8f2,bg+:#44475a,hl+:#bd93f9 --color=info:#ffb86c,prompt:#50fa7b,pointer:#ff79c6 --color=marker:#ff79c6,spinner:#ffb86c,header:#6272a4 --cycle --marker=x --height=50%'
+
+# ask the user to copy an exist service file or create a new one
+# ask the user for the new service name and if copied suggest the copied name
+# make sure no service with the same name already exists
+
+# Show menu contains edit values, save to a file, install service, exit
+# open menu containing the supported sections e.g. Unit, Service and Install
+# By selecting a section the user can edit the values for that section
+# Some values can suggest a default value
+#
+# At the end one the user selects save to file all values are saved to a file
+# By selecting install the values are written to a file and installed as a service
+
+
+# # Check to load an existing service
+# read -p "Copy an installed service? (y/N)> " -r copy_service
+# if [[ $copy_service =~ ^[Yy]$ ]]; then
+#     copy_service=$(ls -1 /etc/systemd/system/*.service \
+#         | fzf -e --header="Select service file" --preview 'cat {}')
+#     if [ -z "$copy_service" ]; then
+#         display_error "No service file selected. Exiting."
+#     fi
+#     
+#     # ask new service name
+#     read -p "Enter new service name ($(basename "${copy_service%.service}")): " -r service_name
+#     if [ -z "$service_name" ]; then
+#         service_name=$(basename "${copy_service%.service}")
+#     fi
+#     # !TODO: Load service file and start working on it
+# else
+#     read -p "Enter new service name: " -r service_name
+# fi
+#
+
+create_service() {
+    read -p "Enter new service name: " -r service_name
+    if [ -z "$service_name" ]; then
+        display_error "No service name entered. Exiting."
+    fi
+
+    read -p "Enter service description: " -r service_description
+
+    read -p "Enter working directory ($(pwd)): " -r working_directory
+    if [ -z "$working_directory" ]; then
+        working_directory=$(pwd)
+    fi
+
+    read -p "Enter executable path: " -r executable_path
+    if [ -z "$executable_path" ]; then
+        display_warning "No executable path entered."
+    else
+        [ ! -f "$executable_path" ] && display_warning "Executable path does not exist."
+    fi
+
+# select username
+username=$(getent passwd | cut -d: -f1 \
+    | fzf -e --prompt "User name " --header "Select User" -q "$(whoami)")
+    [ -z "$username" ] && display_warning "No user selected."
+
+
+# select group name
+group_name=$(getent group | cut -d: -f1 \
+    | fzf -e --prompt "Group name " --header "Select Group" -q "$(whoami)")
+    [ -z "$group_name" ] && display_warning "No group selected."
+
+# Select After directive
+after_directive=$(systemctl list-units --all --plain --no-legend \
+    | awk '$1 ~ /target$/{print $1}' \
+    | fzf -e --prompt "Order after "\
+    --header "Select which target to insert after" -q "network.target")
+    [ -z "$after_directive" ] && display_warning "No After directive selected."
+
+# Select WantedBy directive
+wanted_by_directive=$(systemctl list-units --all --plain --no-legend \
+    | awk '$1 ~ /target$/{print $1}' \
+    | fzf -e --prompt "Run after "\
+    --header "Select which target to run after" -q "multi-user.target")
+    [ -z "$wanted_by_directive" ] && display_warning "No WantedBy directive selected."
+
+# Display a summary of the user's choices
+echo
+echo -e "${GREEN}Service Configuration Summary${RESET}"
+echo -e "${MAGENTA}Service Name: ${CYAN}${service_name}${RESET}"
+echo -e "${MAGENTA}Description: ${CYAN}${service_description}${RESET}"
+echo -e "${MAGENTA}ExecStart: ${CYAN}${executable_path}${RESET}"
+echo -e "${MAGENTA}WorkingDirectory: ${CYAN}${working_directory}${RESET}"
+echo -e "${MAGENTA}User: ${CYAN}${username}${RESET}"
+echo -e "${MAGENTA}Group: ${CYAN}${group_name}${RESET}"
+echo -e "${MAGENTA}After: ${CYAN}${after_directive}${RESET}"
+echo -e "${MAGENTA}WantedBy: ${CYAN}${wanted_by_directive}${RESET}"
+echo
+
+# generated service file content
+service_file_content="[Unit]
+Description=${service_description}
+After=${after_directive}
+
+[Service]
+ExecStart=${executable_path}
+WorkingDirectory=${working_directory}
+User=${username}
+Group=${group_name}
+Restart=on-failure
+
+[Install]
+WantedBy=${wanted_by_directive}
+"
+
+display_info "Saving to file ${service_name}.service"
+echo "$service_file_content" > "${service_name}.service"
+display_success "Service file ${service_name}.service created successfully."
+
+echo -e "${RED}"
+read -p "Open in vim before installing? (y\N)> " -r open_editor
+echo -e "${RESET}"
+if [[ $open_editor =~ ^[Yy]$ ]]; then
+    vim "${service_name}.service" || display_error "Failed to open editor. Exiting."
+fi
+
+display_info "Installing to /etc/systemd/system/${service_name}.service"
+sudo cp "${service_name}.service" "/etc/systemd/system/${service_name}.service"
+sudo systemctl daemon-reload
+display_success "Service installed successfully."
+
+read -p "Do you want to enable the service at boot time? (y\N)> " -r enable_service
+if [[ $enable_service =~ ^[Yy]$ ]]; then
+    sudo systemctl enable "${service_name}.service"
+    display_success "Service enabled successfully."
+fi
+
+read -p "Do you want to start the service now? (y\N)> " -r start_service
+if [[ $start_service =~ ^[Yy]$ ]]; then
+    sudo systemctl start "${service_name}.service"
+    display_success "Service started successfully."
+fi
+}
+
+remove_service() {
+    services=$(systemctl list-units --type=service --all --plain --no-legend \
+        | fzf -m --header "Select service(s) to remove" \
+        | awk '{print $1}')
+
+    if [ -z "$services" ]; then
+        display_warning "No service selected."
+        exit 1
+    fi
+
+    for service in $services; do
+        sudo systemctl stop "$service"
+        sudo systemctl disable "$service"
+        sudo rm "/etc/systemd/system/$service"
+        [ $? -eq 0 ] && display_success "Service $service removed successfully."
+        echo
+    done
+}
+
+# Main Script
+
+while true; do
+    echo -e "${GREEN}Choose action${MAGENTA}"
+    select choice in "create service" "remove service/s" "exit"; do
+        echo -e "${RESET}"
+        case $choice in
+            "create service")
+                create_service
+                break
+                ;;
+            "remove service/s")
+                remove_service
+                break
+                ;;
+            exit)
+                exit 0 ;;
+            *) display_error "Invalid choice." 1 ;;
+        esac
+    done
+done
