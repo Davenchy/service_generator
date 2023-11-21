@@ -30,3 +30,13 @@ The script has 3 modes:
 - Edit using vim
 - Enable service on boot time
 - Start the service now
+
+## Screenshots
+
+- Overall script output in create mode
+
+![Overall script output in create mode](screens/screen1.png)
+
+- How using fzf to select some fields with suggested answers
+
+![How using fzf to select some fields with suggested answers](screens/screen2.png)
