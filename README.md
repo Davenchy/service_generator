@@ -39,4 +39,4 @@ The script has 3 modes:
 
 - How using fzf to select suggested answers for some fields.
 
-![How using fzf to select suggested answers for some fields]screens/screen2.png)
+![How using fzf to select suggested answers for some fields](screens/screen2.png)
