@@ -4,7 +4,7 @@ A simple bash script to generate general systemd services.
 
 ## Dependencies
 
-This script depends on: `systemd` fzf` `tput` `getent` `vim`
+This script depends on: `systemd` `fzf` `tput` `getent` `vim`
 
 ## Usage
 
