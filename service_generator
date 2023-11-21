@@ -119,27 +119,27 @@ create_service() {
 # select username
 username=$(getent passwd | cut -d: -f1 \
     | fzf -e --prompt "User name " --header "Select User" -q "$(whoami)")
-    [ -z "$username" ] && display_warning "No user selected."
+    [ -z "$username" ] && display_warning "No user selected." || display_info "Selected user: $username"
 
 
 # select group name
 group_name=$(getent group | cut -d: -f1 \
     | fzf -e --prompt "Group name " --header "Select Group" -q "$(whoami)")
-    [ -z "$group_name" ] && display_warning "No group selected."
+    [ -z "$group_name" ] && display_warning "No group selected." || display_info "Selected group: $group_name"
 
 # Select After directive
 after_directive=$(systemctl list-units --all --plain --no-legend \
     | awk '$1 ~ /target$/{print $1}' \
     | fzf -e --prompt "Order after "\
     --header "Select which target to insert after" -q "network.target")
-    [ -z "$after_directive" ] && display_warning "No After directive selected."
+    [ -z "$after_directive" ] && display_warning "No After directive selected." || display_info "Selected After: $after_directive"
 
 # Select WantedBy directive
 wanted_by_directive=$(systemctl list-units --all --plain --no-legend \
     | awk '$1 ~ /target$/{print $1}' \
     | fzf -e --prompt "Run after "\
     --header "Select which target to run after" -q "multi-user.target")
-    [ -z "$wanted_by_directive" ] && display_warning "No WantedBy directive selected."
+    [ -z "$wanted_by_directive" ] && display_warning "No WantedBy directive selected." || display_info "Selected WantedBy: $wanted_by_directive"
 
 # Display a summary of the user's choices
 echo
