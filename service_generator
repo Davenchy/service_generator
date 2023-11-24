@@ -107,7 +107,34 @@ function EditService {
 }
 
 function ShowControlServiceHelp {
-    echo -e ""
+    declare -A options=(
+    [Status]="Show service status"
+    [Start]="Start the service"
+    [Stop]="Stop the service"
+    [Restart]="Restart the service"
+    [Enable]="Enable the service to start at boot time"
+    [Disable]="Disable the service to start at boot time"
+    [Print]="Print the service configuration"
+    [Logs]="Show the service logs"
+    ["Follow Logs"]="Show the service logs and wait for new updates"
+    [Edit]="Enter edit mode to edit the service"
+    [Help]="Show this help message"
+    [Editor]="Open the service file in a text editor (\$EDITOR)"
+    [Remove]="Stop, Disable then Remove the service"
+    [Copy]="Copy the service configuration to a new name"
+    [Rename]="Rename the service to a new name"
+    [Create Service]="Create a new service"
+    [Select Service]="Select another service"
+    [Back]="Go back one step"
+    [Exit]="Exit this script"
+)
+
+    echo
+    echo -e "${GREEN}Available Options:${RESET}"
+    for option in "${!options[@]}"; do
+        echo -e "${BLUE}$option:\n\t\t${YELLOW}${options[$option]}${RESET}\n"
+    done
+    echo
 }
 
 function ControlService {
@@ -117,17 +144,17 @@ function ControlService {
     local service_name=${service_file%.service}
 
     local options=("Status" "Start" "Stop" "Restart" "Enable" "Disable" "Print"
-        "Logs" "Follow Logs" "Edit" "Help" "Editor" "Remove"
+        "Logs" "Follow Logs" "Edit" "Help" "Editor" "Remove" "Copy" "Rename"
         "Create Service" "Select Service" "Back" "Exit")
 
     # show service status
     systemctl status "$service_file" | head -n 3
 
-    echo -e "${BLUE}"
+    echo -e "${YELLOW}"
     select option in "${options[@]}"; do
         echo -en "${RESET}"
         case "$option" in
-            "Help") ShowControlServiceHelp;;
+            "Help") ShowControlServiceHelp | less -SR;;
             "Start") sudo systemctl start "$service_file";;
             "Restart") sudo systemctl restart "$service_file";;
             "Stop") sudo systemctl stop "$service_file";;
@@ -139,6 +166,8 @@ function ControlService {
             "Print") systemctl cat "$service_file";;
             "Editor") sudo bash -c "$EDITOR $service_path";;
             "Edit") EditService "$1";;
+            "Copy") CopyMoveService "$1" "cp" && break;;
+            "Rename") CopyMoveService "$1" "mv" && break;;
             "Remove")
                 sudo systemctl stop "$service_file" > /dev/null 2>&1
                 sudo systemctl disable "$service_file" > /dev/null 2>&1
@@ -146,13 +175,49 @@ function ControlService {
                 sudo systemctl daemon-reload > /dev/null 2>&1
                 display_success "Service Removed!"
                 break;;
-            "Create Service") CreateService;;
-            "Select Service") SelectService;;
+            "Create Service") CreateService && break;;
+            "Select Service") SelectService && break;;
             "Back") break;;
             "Exit") exit 0;;
             *) display_error "Invalid Choice" 1;;
         esac
     done
+}
+
+function CopyMoveService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
+
+    # get service name
+    while true; do
+        read -p "${GREEN}Enter a new service name: ${YELLOW}" -r new_service_name
+        # if no service exists with the same name then goto next step
+        ServiceExists "$new_service_name" || break
+        # display error and loop if service with the same name exists
+        display_error "A service with the same name exists!" 1
+    done
+
+    # copy the service with a new name
+    local new_path="${SYSD}${new_service_name}.service"
+    if sudo bash -c "$2 '$service_path' '$new_path'"; then
+        display_success "Service copied to $new_path"
+        ControlService "$new_path"
+    else
+        display_error "Failed to copy the service, Exiting..."
+    fi
+}
+
+# Returns 0 if "$1: service" exists otherwise 1
+function ServiceExists {
+    local service="$1"
+    service="$(basename "$service")"
+    service="${service%.service}"
+
+    test -f "${SYSD}${service}.service" && return 0
+    ReloadSystemD
+    LoadServices | grep -e "^${service}.service\$" > /dev/null 2>&1
 }
 
 function CreateService {
@@ -161,10 +226,8 @@ function CreateService {
     # get service name
     while true; do
         read -p "${GREEN}Enter service name: ${YELLOW}" -r service_name
-        local service_path="${SYSD}${service_name}.service"
-
-        # if no service file exists with the same name then goto next step
-        [ ! -f "$service_path" ] && break
+        # if no service exists with the same name then goto next step
+        ServiceExists "$service_name" || break
         # display error and loop if service with the same name exists
         display_error "A service with the same name exists!" 1
     done
@@ -176,6 +239,9 @@ function CreateService {
     Description=${service_description}
     "
 
+    # generate service path
+    local service_path="${SYSD}${service_name}.service"
+    # write service content to file
     if sudo bash -c "echo '$service_content' > $service_path"; then
         display_success "Service file created at ${service_path}"
         ControlService "${service_path}"
@@ -184,16 +250,22 @@ function CreateService {
     fi
 }
 
+function ReloadSystemD {
+    display_info "Reloading SystemD Daemons!!!"
+    sudo systemctl daemon-reload
+}
+
+function LoadServices {
+    systemctl list-unit-files --type=service | awk '$1 ~ ".service"{print $1}'
+}
+
 function SelectService {
     local service=""
 
     # reload systemd services
-    display_info "Reloading systemd daemons!"
-    sudo systemctl daemon-reload
+    ReloadSystemD
     # use fzf to select a service from filtered list
-    service=$(systemctl list-unit-files --type=service \
-        | awk '$1 ~ ".service" { print $1 }' \
-        | fzf -e --header "Select Service" --prompt "Service: ")
+    service=$(LoadServices | fzf -e --header "Select Service" --prompt "Service: ")
 
     # check if a service was selected
     if [ -z "$service" ]; then
