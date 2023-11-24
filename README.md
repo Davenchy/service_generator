@@ -11,16 +11,25 @@ This script depends on: `systemd` `fzf` `tput` `getent` `vim`
 The script works in interactive mode only!!
 
 The script has 3 modes:
+
 - `Create` to generate a new empty and unusable service.
 - `Control` to control a service (Start/Stop/Enable/Disable/Logs/...).
 - `Edit` to edit a service (add/remove directives to control service behavior).
 
 ## Screenshots
 
-- Overall script output in create mode
+- The Main Menu
 
-![Overall script output in create mode](screens/screen1.png)
+![](./screens/main_menu.png)
 
-- How using fzf to select suggested answers for some fields.
+- Creating a new service
 
-![How using fzf to select suggested answers for some fields](screens/screen2.png)
+![](./screens/create_service.png)
+
+- Searching for a service using FZF
+
+![](./screens/search_service.png)
+
+- Control a service
+
+![](./screens/control_service.png)
