@@ -2,6 +2,9 @@
 # This script will generate a systemd service file
 # Dracula Theme is used: https://draculatheme.com/
 
+# Globals
+SYSD="/usr/lib/systemd/system/"
+
 # reset terminal
 reset
 
@@ -84,7 +87,7 @@ GREEN="$(color green 83 "$(color_hex2dec 0x00 0xF7 0x69)")"
 YELLOW="$(color yellow 227 "$(color_hex2dec 0xEB 0xFF 0x87)")"
 BLUE="$(color blue 111 "$(color_hex2dec 0x62 0xD6 0xE8)")"
 MAGENTA="$(color magenta 200 "$(color_hex2dec 0xB4 0x5B 0xCF)")"
-CYAN="$(color cyan 45 "$(color_hex2dec 0x62 0xD6 0xE8)")"
+CYAN="$(color cyan 45 "$(color_hex2dec 0xA1 0xEF 0xE4)")"
 WHITE="$(color white 231 "$(color_hex2dec 0xE9 0xE9 0xF4)")"
 NC="$(echo -en '\e[0m')"
 RESET="$(echo -en '\e[0m')"
@@ -92,167 +95,140 @@ RESET="$(echo -en '\e[0m')"
 # FZF default confiuration
 export FZF_DEFAULT_OPTS='--color=fg:#f8f8f2,bg:#282a36,hl:#bd93f9 --color=fg+:#f8f8f2,bg+:#44475a,hl+:#bd93f9 --color=info:#ffb86c,prompt:#50fa7b,pointer:#ff79c6 --color=marker:#ff79c6,spinner:#ffb86c,header:#6272a4 --cycle --marker=x --height=50%'
 
-# modes
-#
-#
+# Action Scripts
 
-create_service() {
-    read -p "Enter new service name: " -r service_name
-    if [ -z "$service_name" ]; then
-        display_error "No service name entered. Exiting."
-    fi
+function EditService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
 
-    read -p "Enter service description: " -r service_description
-
-    read -p "Enter working directory ($(pwd)): " -r working_directory
-    if [ -z "$working_directory" ]; then
-        working_directory=$(pwd)
-    fi
-
-    read -p "Enter executable path: " -r executable_path
-    if [ -z "$executable_path" ]; then
-        display_warning "No executable path entered."
-    else
-        [ ! -f "$executable_path" ] && display_warning "Executable path does not exist."
-    fi
-
-# select username
-username=$(getent passwd | cut -d: -f1 \
-    | fzf -e --prompt "User name " --header "Select User" -q "$(whoami)")
-    [ -z "$username" ] && display_warning "No user selected." || display_info "Selected user: $username"
-
-
-# select group name
-group_name=$(getent group | cut -d: -f1 \
-    | fzf -e --prompt "Group name " --header "Select Group" -q "$(whoami)")
-    [ -z "$group_name" ] && display_warning "No group selected." || display_info "Selected group: $group_name"
-
-# Select After directive
-after_directive=$(systemctl list-units --all --plain --no-legend \
-    | awk '$1 ~ /target$/{print $1}' \
-    | fzf -e --prompt "Order after "\
-    --header "Select which target to insert after" -q "network.target")
-    [ -z "$after_directive" ] && display_warning "No After directive selected." || display_info "Selected After: $after_directive"
-
-# Select WantedBy directive
-wanted_by_directive=$(systemctl list-units --all --plain --no-legend \
-    | awk '$1 ~ /target$/{print $1}' \
-    | fzf -e --prompt "Run after "\
-    --header "Select which target to run after" -q "multi-user.target")
-    [ -z "$wanted_by_directive" ] && display_warning "No WantedBy directive selected." || display_info "Selected WantedBy: $wanted_by_directive"
-
-# Display a summary of the user's choices
-echo
-echo -e "${GREEN}Service Configuration Summary${RESET}"
-echo -e "${MAGENTA}Service Name: ${CYAN}${service_name}${RESET}"
-echo -e "${MAGENTA}Description: ${CYAN}${service_description}${RESET}"
-echo -e "${MAGENTA}ExecStart: ${CYAN}${executable_path}${RESET}"
-echo -e "${MAGENTA}WorkingDirectory: ${CYAN}${working_directory}${RESET}"
-echo -e "${MAGENTA}User: ${CYAN}${username}${RESET}"
-echo -e "${MAGENTA}Group: ${CYAN}${group_name}${RESET}"
-echo -e "${MAGENTA}After: ${CYAN}${after_directive}${RESET}"
-echo -e "${MAGENTA}WantedBy: ${CYAN}${wanted_by_directive}${RESET}"
-echo
-
-# generated service file content
-service_file_content="[Unit]
-Description=${service_description}
-After=${after_directive}
-
-[Service]
-ExecStart=${executable_path}
-WorkingDirectory=${working_directory}
-User=${username}
-Group=${group_name}
-Restart=on-failure
-
-[Install]
-WantedBy=${wanted_by_directive}
-"
-
-display_info "Saving to file ${service_name}.service"
-echo "$service_file_content" > "${service_name}.service"
-display_success "Service file ${service_name}.service created successfully."
-
-echo -e "${RED}"
-read -p "Open in vim before installing? (y\N)> " -r open_editor
-echo -e "${RESET}"
-if [[ $open_editor =~ ^[Yy]$ ]]; then
-    vim "${service_name}.service" || display_error "Failed to open editor. Exiting."
-fi
-
-display_info "Installing to /etc/systemd/system/${service_name}.service"
-sudo cp "${service_name}.service" "/etc/systemd/system/${service_name}.service"
-sudo systemctl daemon-reload
-display_success "Service installed successfully."
-
-read -p "Do you want to enable the service at boot time? (y\N)> " -r enable_service
-if [[ $enable_service =~ ^[Yy]$ ]]; then
-    sudo systemctl enable "${service_name}.service"
-    display_success "Service enabled successfully."
-fi
-
-read -p "Do you want to start the service now? (y\N)> " -r start_service
-if [[ $start_service =~ ^[Yy]$ ]]; then
-    sudo systemctl start "${service_name}.service"
-    display_success "Service started successfully."
-fi
+    echo "EditService"
 }
 
-remove_service() {
-    services=$(systemctl list-units --type=service --all --plain --no-legend \
-        | fzf -m --header "Select service(s) to remove" \
-        | awk '{print $1}')
+function ShowControlServiceHelp {
+    echo -e ""
+}
 
-    if [ -z "$services" ]; then
-        display_warning "No service selected."
-        exit 1
-    fi
+function ControlService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
 
-    for service in $services; do
-        sudo systemctl stop "$service"
-        sudo systemctl disable "$service"
-        sudo rm "/etc/systemd/system/$service"
-        [ $? -eq 0 ] && display_success "Service $service removed successfully."
-        echo
+    local options=("Status" "Start" "Stop" "Restart" "Enable" "Disable" "Print"
+        "Logs" "Follow Logs" "Edit" "Help" "Editor" "Remove"
+        "Create Service" "Select Service" "Back" "Exit")
+
+    # show service status
+    systemctl status "$service_file" | head -n 3
+
+    echo -e "${BLUE}"
+    select option in "${options[@]}"; do
+        echo -en "${RESET}"
+        case "$option" in
+            "Help") ShowControlServiceHelp;;
+            "Start") sudo systemctl start "$service_file";;
+            "Restart") sudo systemctl restart "$service_file";;
+            "Stop") sudo systemctl stop "$service_file";;
+            "Enable") sudo systemctl enable "$service_file";;
+            "Disable") sudo systemctl disable "$service_file";;
+            "Status") systemctl status "$service_file";;
+            "Logs") journalctl -u "$service_file";;
+            "Follow Logs") journalctl -u "$service_file" -f;;
+            "Print") systemctl cat "$service_file";;
+            "Editor") sudo bash -c "$EDITOR $service_path";;
+            "Edit") EditService "$1";;
+            "Remove")
+                sudo systemctl stop "$service_file" > /dev/null 2>&1
+                sudo systemctl disable "$service_file" > /dev/null 2>&1
+                sudo rm "$service_path" > /dev/null 2>&1
+                sudo systemctl daemon-reload > /dev/null 2>&1
+                display_success "Service Removed!"
+                break;;
+            "Create Service") CreateService;;
+            "Select Service") SelectService;;
+            "Back") break;;
+            "Exit") exit 0;;
+            *) display_error "Invalid Choice" 1;;
+        esac
     done
 }
 
-edit_service() {
-    service=$(systemctl list-units --type=service --all --plain --no-legend \
-        | fzf -e --header "Select service to edit" --prompt "Service: " \
-        | awk '{print $1}')
-    if [ -z "$service" ]; then
-        display_warning "No service selected."
-        exit 1
+function CreateService {
+    display_info "Create a new service"
+
+    # get service name
+    while true; do
+        read -p "${GREEN}Enter service name: ${YELLOW}" -r service_name
+        local service_path="${SYSD}${service_name}.service"
+
+        # if no service file exists with the same name then goto next step
+        [ ! -f "$service_path" ] && break
+        # display error and loop if service with the same name exists
+        display_error "A service with the same name exists!" 1
+    done
+
+    # get service description
+    read -p "${GREEN}Enter service description: ${YELLOW}" -r service_description
+
+    local service_content="[Unit]
+    Description=${service_description}
+    "
+
+    if sudo bash -c "echo '$service_content' > $service_path"; then
+        display_success "Service file created at ${service_path}"
+        ControlService "${service_path}"
+    else
+        display_error "Failed to write service file to $service_path, Exiting..."
     fi
-    sudo vim "/etc/systemd/system/$service"
+}
+
+function SelectService {
+    local service=""
+
+    # reload systemd services
+    display_info "Reloading systemd daemons!"
     sudo systemctl daemon-reload
-    display_success "Service $service edited successfully."
+    # use fzf to select a service from filtered list
+    service=$(systemctl list-unit-files --type=service \
+        | awk '$1 ~ ".service" { print $1 }' \
+        | fzf -e --header "Select Service" --prompt "Service: ")
+
+    # check if a service was selected
+    if [ -z "$service" ]; then
+        display_error "Please select service!" 1
+        return
+    fi
+
+    # get service file path
+    service_path=$(systemctl show -p FragmentPath "$service" | cut -d'=' -f2 )
+
+    # use the selected service file path to enter control mode
+    ControlService "$service_path"
 }
 
 # Main Script
 
-while true; do
-    echo -e "${GREEN}Choose action${MAGENTA}"
-    select choice in "create service" "remove service/s" "edit service" "exit"; do
+function main {
+    PS3="${MAGENTA}Selected Action: ${YELLOW}"
+    local actions=(
+        "Create Service"
+        "Select Service"
+        "Exit"
+    )
+
+    echo -e "${GREEN}How can I help?${BLUE}"
+    select action in "${actions[@]}"; do
         echo -e "${RESET}"
-        case $choice in
-            "create service")
-                create_service
-                break
-                ;;
-            "remove service/s")
-                remove_service
-                break
-                ;;
-            "edit service")
-                edit_service
-                break
-                ;;
-            exit)
-                exit 0 ;;
-            *) display_error "Invalid choice." 1 ;;
+        case $action in
+            "Create Service") CreateService;;
+            "Select Service") SelectService;;
+            "Exit") exit 0;;
+            *) display_error "Invalid Choice" 1 ;;
         esac
     done
-done
+}
+
+# Run main function
+main "$@"
