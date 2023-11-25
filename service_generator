@@ -357,7 +357,7 @@ function EditService {
     done
 }
 
-function ShowControlServiceHelp {
+function DisplayControlServiceHelp {
     declare -A options=(
     [Status]="Show service status"
     [Start]="Start the service"
@@ -406,7 +406,7 @@ function ControlService {
     select option in "${options[@]}"; do
         echo -en "${RESET}"
         case "$option" in
-            "Help") ShowControlServiceHelp | less -SR;;
+            "Help") DisplayControlServiceHelp | less -SR;;
             "Start") sudo systemctl start "$service_file";;
             "Restart") sudo systemctl restart "$service_file";;
             "Stop") sudo systemctl stop "$service_file";;
