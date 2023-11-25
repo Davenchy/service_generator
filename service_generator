@@ -40,7 +40,7 @@ display_info() {
 }
 
 # check required tools are installed
-required_tools=("fzf" "tput" "getent" "vim")
+required_tools=("fzf" "tput" "getent" "vim" "xclip")
 for tool in "${required_tools[@]}"; do
     [ -z "$(command -v "$tool")" ] \
         && display_error "$tool is not installed, please install it."
@@ -121,6 +121,7 @@ function ShowControlServiceHelp {
     [Help]="Show this help message"
     [Editor]="Open the service file in a text editor (\$EDITOR)"
     [Remove]="Stop, Disable then Remove the service"
+    [Clipboard]="Copy the service file content into your system clipboard"
     [Copy]="Copy the service configuration to a new name"
     [Rename]="Rename the service to a new name"
     [Create Service]="Create a new service"
@@ -168,6 +169,8 @@ function ControlService {
             "Edit") EditService "$1";;
             "Copy") CopyMoveService "$1" "cp" && break;;
             "Rename") CopyMoveService "$1" "mv" && break;;
+            "Clipboard") systemctl cat "$service_file" \
+                | xclip -sel clip && display_success "Service content copied to clipboard";;
             "Remove")
                 sudo systemctl stop "$service_file" > /dev/null 2>&1
                 sudo systemctl disable "$service_file" > /dev/null 2>&1
@@ -189,10 +192,11 @@ function CopyMoveService {
     local service_file
     service_file="$(basename "$service_path")"
     local service_name=${service_file%.service}
+    local new_service_name="$service_name"
 
     # get service name
     while true; do
-        read -p "${GREEN}Enter a new service name: ${YELLOW}" -r new_service_name
+        read -re -p "${GREEN}Enter service name: ${YELLOW}" -i "$new_service_name" new_service_name
         # if no service exists with the same name then goto next step
         ServiceExists "$new_service_name" || break
         # display error and loop if service with the same name exists
@@ -222,10 +226,11 @@ function ServiceExists {
 
 function CreateService {
     display_info "Create a new service"
+    local service_name=""
 
     # get service name
     while true; do
-        read -p "${GREEN}Enter service name: ${YELLOW}" -r service_name
+        read -re -p "${GREEN}Enter service name: ${YELLOW}" -i "$service_name" service_name
         # if no service exists with the same name then goto next step
         ServiceExists "$service_name" || break
         # display error and loop if service with the same name exists
@@ -237,6 +242,9 @@ function CreateService {
 
     local service_content="[Unit]
     Description=${service_description}
+
+    [Install]
+    WantedBy=multi-user.target
     "
 
     # generate service path
@@ -303,4 +311,4 @@ function main {
 }
 
 # Run main function
-main "$@"
+main
