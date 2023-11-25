@@ -33,3 +33,17 @@ The script has 3 modes:
 - Control a service
 
 ![](./screens/control_service.png)
+
+- Edit Service Mode
+
+![](./screens/edit_service.png)
+
+- Set manual directive `Service,ExecStart` to `my_binary`
+- Set the service working directory to the current location using option 5
+- Finally set the user to `davenchy` using option 6
+
+![](./screens/set_service_directives.png)
+
+- Save Service
+
+![](./screens/save_service.png)
