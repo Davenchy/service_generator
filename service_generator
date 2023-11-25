@@ -541,7 +541,9 @@ function CreateService {
 
     # get service name
     while true; do
-        read -re -p "${GREEN}Enter service name: ${YELLOW}" -i "$service_name" service_name
+        read -re -p "${GREEN}Enter service name (leave empty to cancel): ${YELLOW}" -i "$service_name" service_name
+        # Check for process abort
+        [ -z "$service_name" ] && return 1
         # if no service exists with the same name then goto next step
         ServiceExists "$service_name" || break
         # display error and loop if service with the same name exists

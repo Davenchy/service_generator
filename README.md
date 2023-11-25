@@ -64,15 +64,19 @@ chmod +x service_generator
 
 ![](./screens/edit_service.png)
 
-- Set manual directive `Service,ExecStart` to `my_binary`
-- Set the service working directory to the current location using option 5
-- Finally set the user to `davenchy` using option 6
+- Set manual directive `Service:ExecStart` to `my_binary`
+- Set the service working directory to the current location using option 6
+- Finally set the user to `davenchy` using option 7
 
 ![](./screens/set_service_directives.png)
 
 - Save Service
 
 ![](./screens/save_service.png)
+
+- Let's check the final results using the List option
+
+![](./screens/list_service.png)
 
 ## Help Messages
 
