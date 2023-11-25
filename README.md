@@ -4,17 +4,43 @@ A simple bash script to generate/control systemd services.
 
 ## Dependencies
 
-This script depends on: `systemd` `fzf` `tput` `getent` `vim` `xclip`
+This script requires the following dependencies:
+
+- `systemd`
+- `fzf`
+- `tput`
+- `getent`
+- `vim`
+- `xclip`
+- `id`
+
+Make sure these dependencies are installed on your system. If any are missing, the script will display an error.
 
 ## Usage
 
 The script works in interactive mode only!!
+
+Some modes and options requires Root Privileges, sudo will be used so you will be prompted for your password.
 
 The script has 3 modes:
 
 - `Create` to generate a new empty and unusable service.
 - `Control` to control a service (Start/Stop/Enable/Disable/Logs/...).
 - `Edit` to edit a service (add/remove directives to control service behavior).
+
+Ensure the script has execution privileges:
+
+```bash
+chmod +x service_generator
+```
+
+## TODO
+
+[] Allow user to set service dependencies (Requires, After, etc...) using the edit mode.
+
+[] Allow user to manage environment variables from the edit mode.
+
+[] Allow user to define templates
 
 ## Screenshots
 
@@ -52,7 +78,9 @@ The script has 3 modes:
 
 ### Control Mode
 
-```
+```bash
+# Help messages for Control Mode
+
 Status:
 	Show service status
 
@@ -117,30 +145,38 @@ Exit:
 
 ### Edit Mode
 
-```
+```bash
+# Help messages for Edit Mode
+
 List:
 	List the service file with colored current values
 
-Show:
-	Show the value of a key (section,directive) e.g. Unit,Description
+List Section:
+	List all directives with its values for a selected section
+
+Copy Value:
+	Select key and copy its value to system clipboard
 
 Set:
-	Select Section,Directive and set its value, set empty value to remove the directive
+	Select (Section:Directive) and set its value, set empty value to remove the directive
 
 Set Manual:
-	Use manual key(Section,Directive) to create/set/remove directive
+	Use manual key(Section:Directive) to create/set/remove directive
 
 Set Current Working Directory:
-	Set directive Service,WorkingDirectory to current working directory
+	Sets (Service:WorkingDirectory) to current working directory
 
 Set User:
-	Set Service,User to the selected user
+	Sets (Service:User) to the selected user
 
 Set Group:
-	Set Service,Group to the selected group
+	Sets (Service:Group) to the selected group
 
 Set Type:
-	Set Service,Type to the selected service types
+	Sets (Service:Type) to the selected service types
+
+Control Mode:
+	Enter Control Mode for the current service
 
 Help:
 	Print this help message
