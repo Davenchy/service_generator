@@ -2,6 +2,9 @@
 # This script will generate a systemd service file
 # Dracula Theme is used: https://draculatheme.com/
 
+# Globals
+SYSD="/usr/lib/systemd/system/"
+
 # reset terminal
 reset
 
@@ -37,7 +40,7 @@ display_info() {
 }
 
 # check required tools are installed
-required_tools=("fzf" "tput" "getent" "vim")
+required_tools=("fzf" "tput" "getent" "vim" "xclip")
 for tool in "${required_tools[@]}"; do
     [ -z "$(command -v "$tool")" ] \
         && display_error "$tool is not installed, please install it."
@@ -84,7 +87,7 @@ GREEN="$(color green 83 "$(color_hex2dec 0x00 0xF7 0x69)")"
 YELLOW="$(color yellow 227 "$(color_hex2dec 0xEB 0xFF 0x87)")"
 BLUE="$(color blue 111 "$(color_hex2dec 0x62 0xD6 0xE8)")"
 MAGENTA="$(color magenta 200 "$(color_hex2dec 0xB4 0x5B 0xCF)")"
-CYAN="$(color cyan 45 "$(color_hex2dec 0x62 0xD6 0xE8)")"
+CYAN="$(color cyan 45 "$(color_hex2dec 0xA1 0xEF 0xE4)")"
 WHITE="$(color white 231 "$(color_hex2dec 0xE9 0xE9 0xF4)")"
 NC="$(echo -en '\e[0m')"
 RESET="$(echo -en '\e[0m')"
@@ -92,167 +95,471 @@ RESET="$(echo -en '\e[0m')"
 # FZF default confiuration
 export FZF_DEFAULT_OPTS='--color=fg:#f8f8f2,bg:#282a36,hl:#bd93f9 --color=fg+:#f8f8f2,bg+:#44475a,hl+:#bd93f9 --color=info:#ffb86c,prompt:#50fa7b,pointer:#ff79c6 --color=marker:#ff79c6,spinner:#ffb86c,header:#6272a4 --cycle --marker=x --height=50%'
 
-# modes
-#
-#
+# Action Scripts
 
-create_service() {
-    read -p "Enter new service name: " -r service_name
-    if [ -z "$service_name" ]; then
-        display_error "No service name entered. Exiting."
-    fi
+function ReadService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
 
-    read -p "Enter service description: " -r service_description
+    declare -gxA SERVICE=()
+    local section=""
 
-    read -p "Enter working directory ($(pwd)): " -r working_directory
-    if [ -z "$working_directory" ]; then
-        working_directory=$(pwd)
-    fi
+    while read -r line; do
+        # skip empty lines
+        [ -z "$line" ] && continue
+        # skip comments
+        [ "$(expr "$line" : '^ *#.*$')" -gt 0 ] && continue
 
-    read -p "Enter executable path: " -r executable_path
-    if [ -z "$executable_path" ]; then
-        display_warning "No executable path entered."
-    else
-        [ ! -f "$executable_path" ] && display_warning "Executable path does not exist."
-    fi
+        # get section name if line is a section header
+        sectionCase="$(expr "$line" : '^\[\(.*\)\]$')"
+        # check if line is a directive and a value/s
+        directiveCase="$(expr "$line" : '^.*=.*$')"
 
-# select username
-username=$(getent passwd | cut -d: -f1 \
-    | fzf -e --prompt "User name " --header "Select User" -q "$(whoami)")
-    [ -z "$username" ] && display_warning "No user selected." || display_info "Selected user: $username"
+        if [ -n "$sectionCase" ]; then
+            section="$sectionCase"
+        elif [ "$directiveCase" -gt 0 ]; then
+            [ -z "$section" ] && display_error "Directive line without section: $line"
+            IFS='=' read -ra args <<< "$line"
+            SERVICE["$section","${args[0]}"]="${args[1]}"
+        else
+            display_error "Failed to read line: $line" 1
+        fi
+    done < "$service_path"
 
-
-# select group name
-group_name=$(getent group | cut -d: -f1 \
-    | fzf -e --prompt "Group name " --header "Select Group" -q "$(whoami)")
-    [ -z "$group_name" ] && display_warning "No group selected." || display_info "Selected group: $group_name"
-
-# Select After directive
-after_directive=$(systemctl list-units --all --plain --no-legend \
-    | awk '$1 ~ /target$/{print $1}' \
-    | fzf -e --prompt "Order after "\
-    --header "Select which target to insert after" -q "network.target")
-    [ -z "$after_directive" ] && display_warning "No After directive selected." || display_info "Selected After: $after_directive"
-
-# Select WantedBy directive
-wanted_by_directive=$(systemctl list-units --all --plain --no-legend \
-    | awk '$1 ~ /target$/{print $1}' \
-    | fzf -e --prompt "Run after "\
-    --header "Select which target to run after" -q "multi-user.target")
-    [ -z "$wanted_by_directive" ] && display_warning "No WantedBy directive selected." || display_info "Selected WantedBy: $wanted_by_directive"
-
-# Display a summary of the user's choices
-echo
-echo -e "${GREEN}Service Configuration Summary${RESET}"
-echo -e "${MAGENTA}Service Name: ${CYAN}${service_name}${RESET}"
-echo -e "${MAGENTA}Description: ${CYAN}${service_description}${RESET}"
-echo -e "${MAGENTA}ExecStart: ${CYAN}${executable_path}${RESET}"
-echo -e "${MAGENTA}WorkingDirectory: ${CYAN}${working_directory}${RESET}"
-echo -e "${MAGENTA}User: ${CYAN}${username}${RESET}"
-echo -e "${MAGENTA}Group: ${CYAN}${group_name}${RESET}"
-echo -e "${MAGENTA}After: ${CYAN}${after_directive}${RESET}"
-echo -e "${MAGENTA}WantedBy: ${CYAN}${wanted_by_directive}${RESET}"
-echo
-
-# generated service file content
-service_file_content="[Unit]
-Description=${service_description}
-After=${after_directive}
-
-[Service]
-ExecStart=${executable_path}
-WorkingDirectory=${working_directory}
-User=${username}
-Group=${group_name}
-Restart=on-failure
-
-[Install]
-WantedBy=${wanted_by_directive}
-"
-
-display_info "Saving to file ${service_name}.service"
-echo "$service_file_content" > "${service_name}.service"
-display_success "Service file ${service_name}.service created successfully."
-
-echo -e "${RED}"
-read -p "Open in vim before installing? (y\N)> " -r open_editor
-echo -e "${RESET}"
-if [[ $open_editor =~ ^[Yy]$ ]]; then
-    vim "${service_name}.service" || display_error "Failed to open editor. Exiting."
-fi
-
-display_info "Installing to /etc/systemd/system/${service_name}.service"
-sudo cp "${service_name}.service" "/etc/systemd/system/${service_name}.service"
-sudo systemctl daemon-reload
-display_success "Service installed successfully."
-
-read -p "Do you want to enable the service at boot time? (y\N)> " -r enable_service
-if [[ $enable_service =~ ^[Yy]$ ]]; then
-    sudo systemctl enable "${service_name}.service"
-    display_success "Service enabled successfully."
-fi
-
-read -p "Do you want to start the service now? (y\N)> " -r start_service
-if [[ $start_service =~ ^[Yy]$ ]]; then
-    sudo systemctl start "${service_name}.service"
-    display_success "Service started successfully."
-fi
+    # Generate array of service sections
+    ServiceSections
 }
 
-remove_service() {
-    services=$(systemctl list-units --type=service --all --plain --no-legend \
-        | fzf -m --header "Select service(s) to remove" \
-        | awk '{print $1}')
-
-    if [ -z "$services" ]; then
-        display_warning "No service selected."
-        exit 1
-    fi
-
-    for service in $services; do
-        sudo systemctl stop "$service"
-        sudo systemctl disable "$service"
-        sudo rm "/etc/systemd/system/$service"
-        [ $? -eq 0 ] && display_success "Service $service removed successfully."
+function PrintService {
+    for section in "${SERVICE_SECTIONS[@]}"; do
+        echo -e "${BLUE}[${section}]${RESET}"
+        SectionDirectives "$section"
+        for directive in "${!SECTION_DIRECTIVES[@]}"; do
+            local value="${SECTION_DIRECTIVES[$directive]}"
+            echo -e "${MAGENTA}$directive:\n\t\t${YELLOW}${value}${RESET}\n"
+        done
         echo
     done
 }
 
-edit_service() {
-    service=$(systemctl list-units --type=service --all --plain --no-legend \
-        | fzf -e --header "Select service to edit" --prompt "Service: " \
-        | awk '{print $1}')
-    if [ -z "$service" ]; then
-        display_warning "No service selected."
-        exit 1
+function ServiceSections {
+    declare -ga SERVICE_SECTIONS=()
+
+    for key in "${!SERVICE[@]}"; do
+        local section
+        section="$(cut -d, -f1 <<< "$key")"
+        [[ "${SERVICE_SECTIONS[*]}" =~ $section ]] && continue
+        SERVICE_SECTIONS[${#SERVICE_SECTIONS[@]}]="$section"
+    done
+}
+
+function SectionDirectives {
+    local section="$1"
+    declare -gxA SECTION_DIRECTIVES=()
+
+    for directive in "${!SERVICE[@]}"; do
+        [ "$(expr "$directive" : "^${section},.*\$")" -eq 0 ] && continue
+        local name
+        local value
+        name="$(expr "$directive" : '^.*,\(.*\)$')"
+        value="${SERVICE[$directive]}"
+        SECTION_DIRECTIVES["$name"]="$value"
+    done
+}
+
+function SelectDirective {
+    # Get section
+    local section
+    section=$(printf "%s\n" "${SERVICE_SECTIONS[@]}" \
+       | fzf -e --header "Select Service Section" --prompt "Section: ")
+    # validate section was selected
+    [ -z "$section" ] && return 1
+
+    # Generate Directives for current selected section
+    SectionDirectives "$section"
+
+    # Get directive
+    local directive
+    directive=$(printf "%s\n" "${!SECTION_DIRECTIVES[@]}" \
+       | fzf -e --header "Select Service Section" --prompt "Section: ")
+    # validate section was selected
+    [ -z "$directive" ] && return 1
+
+    echo "${section},$directive"
+}
+
+function KeySection {
+    local key="$1"
+    cut -d, -f1 <<< "$key"
+}
+
+function KeyDirective {
+    local key="$1"
+    cut -d, -f2 <<< "$key"
+}
+
+function KeyValue {
+    local key="$1"
+    echo "${SERVICE["$key"]}"
+}
+
+function SaveService {
+    local service_path="$1"
+    
+    # Create a temporary file to store the modified service content
+    local temp_file
+    temp_file="$(mktemp)"
+    
+    # Write the modified content to the temporary file
+    for section in "${SERVICE_SECTIONS[@]}"; do
+        echo -e "[${section}]" >> "$temp_file"
+        SectionDirectives "$section"
+        for directive in "${!SECTION_DIRECTIVES[@]}"; do
+            local value="${SECTION_DIRECTIVES[$directive]}"
+            echo -e "${directive}=${value}" >> "$temp_file"
+        done
+        echo >> "$temp_file"
+    done
+
+    # Overwrite the original service file with the modified content
+    if sudo cp "$temp_file" "$service_path"; then
+        display_success "Service file saved: ${service_path}"
+        ReloadSystemD
+    else
+        display_error "Failed to save the service file: ${service_path}" 1
+        return 1
     fi
-    sudo vim "/etc/systemd/system/$service"
+
+    # Cleanup: Remove the temporary file
+    rm -f "$temp_file"
+
+    return 0
+}
+
+function DisplayEditModeHelp {
+    declare -A options=(
+    [List]="List the service file with colored current values"
+    [Show]="Show the value of a key (section,directive) e.g. Unit,Description"
+	[Set]="Select Section,Directive and set its value, set empty value to remove the directive"
+	["Set Manual"]="Use manual key(Section,Directive) to create/set/remove directive"
+    ["Set Current Working Directory"]="Set directive Service,WorkingDirectory to current working directory"
+    ["Set User"]="Set Service,User to the selected user"
+    ["Set Group"]="Set Service,Group to the selected group"
+    ["Set Type"]="Set Service,Type to the selected service types"
+	[Help]="Print this help message"
+	[Reload]="Reload the current service file and discard changes"
+	[Save]="Save the current changes to the service file, Reload SystemD Daemons and return back to the control mode"
+	[Back]="Discard current changes and return back to control mode"
+	[Exit]="Discard current changes and exit the script"
+    )
+
+    echo
+    echo -e "${GREEN}Available Options:${RESET}"
+    for option in "${!options[@]}"; do
+        echo -e "${BLUE}$option:\n\t\t${YELLOW}${options[$option]}${RESET}\n"
+    done
+    echo
+}
+
+function EditService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
+
+    if ! ReadService "$service_path"; then
+        display_error "Failed to read service file." 1
+        return 1
+    fi
+
+    declare -a options=("List" "Show" "Set" "Set Manual"
+        "Set Current Working Directory"
+        "Set User" "Set Group" "Set Type"
+        "Help" "Reload" "Save" "Back" "Exit")
+
+
+    echo -e "${YELLOW}"
+    select choice in "${options[@]}"; do
+        case "$choice" in
+            List) PrintService | less -SR;;
+            Show)
+                key="$(SelectDirective)"
+                [ -z "$key" ] && continue
+                section="$(KeySection "$key")"
+                directive="$(KeyDirective "$key")"
+                value="$(KeyValue "$key")"
+                echo -e "${BLUE}$section${GREEN},${MAGENTA}$directive${GREEN} = ${YELLOW}$value${RESET}"
+                ;;
+            "Set Manual")
+                local key="Unit,Description"
+
+                while true; do
+                    read -re -p "${MAGENTA}Enter key: ${YELLOW}" -i "$key" key
+                    if ! expr "$key" : '^.*,.*$' > /dev/null 2>&1; then
+                        display_error "Invalid key format: $key" 1
+                        continue
+                    fi
+                    break
+                done
+
+                value="$(KeyValue "$key")"
+                read -re -p "${MAGENTA}Enter value for $key: ${YELLOW}" -i "$value" value
+                echo -en "${RESET}"
+                if [ -n "$value" ]; then
+                    SERVICE[$key]="$value"
+                else
+                    unset "SERVICE[$key]"
+                fi;;
+            Set)
+                local value
+                key=$(SelectDirective)
+                [ -z "$key" ] && continue
+                value="$(KeyValue "$key")"
+                read -re -p "${MAGENTA}Enter value for $key: ${YELLOW}" -i "$value" value 
+                echo -ne "${RESET}"
+                if [ -n "$value" ]; then
+                    SERVICE[$key]="$value"
+                else
+                    unset "SERVICE[$key]"
+                fi;;
+            "Set Current Working Directory")
+                SERVICE["Service,WorkingDirectory"]="$(pwd)";;
+            "Set User")
+                SERVICE["Service,User"]="$(getent passwd \
+                    | cut -d: -f1 \
+                    | fzf -e --header "Select User" --prompt "User: " --query "$(id -un)")";;
+            "Set Group")
+                SERVICE["Service,Group"]="$(getent group \
+                    | cut -d: -f1 \
+                    | fzf -e --header "Select Group" --prompt "Group: " --query "$(id -gn)")";;
+            "Set Type")
+                key="Service,Type"
+                value=$(KeyValue $key)
+                value=${value:-"simple"}
+                service_type=(simple forking oneshot dbus notify)
+                selections="$(printf "%s\n" "${service_type[@]}"\
+                    | fzf -e -m --disabled --header "Select Service Types(use tab for multi selections): $value"\
+                    | tr '\n' '|')"
+                SERVICE[$key]="${selections:0:-1}";;
+            Save) SaveService "$service_path" && break;;
+            Help) DisplayEditModeHelp | less -SR;;
+            Reload) 
+                if ! ReadService "$service_path"; then
+                    display_error "Failed to read service file." 1
+                    break
+                fi;;
+            Back) break;;
+            Exit) exit 0;;
+            *) display_error "Invalid Choice" 1;;
+        esac
+    done
+}
+
+function ShowControlServiceHelp {
+    declare -A options=(
+    [Status]="Show service status"
+    [Start]="Start the service"
+    [Stop]="Stop the service"
+    [Restart]="Restart the service"
+    [Enable]="Enable the service to start at boot time"
+    [Disable]="Disable the service to start at boot time"
+    [Print]="Print the service configuration"
+    [Logs]="Show the service logs"
+    ["Follow Logs"]="Show the service logs and wait for new updates"
+    [Edit]="Enter edit mode to edit the service"
+    [Help]="Show this help message"
+    [Editor]="Open the service file in a text editor (\$EDITOR)"
+    [Remove]="Stop, Disable then Remove the service"
+    [Clipboard]="Copy the service file content into your system clipboard"
+    [Copy]="Copy the service configuration to a new name"
+    [Rename]="Rename the service to a new name"
+    [Create Service]="Create a new service"
+    [Select Service]="Select another service"
+    [Back]="Go back one step"
+    [Exit]="Exit this script"
+)
+
+    echo
+    echo -e "${GREEN}Available Options:${RESET}"
+    for option in "${!options[@]}"; do
+        echo -e "${BLUE}$option:\n\t\t${YELLOW}${options[$option]}${RESET}\n"
+    done
+    echo
+}
+
+function ControlService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
+
+    local options=("Status" "Start" "Stop" "Restart" "Enable" "Disable" "Print"
+        "Logs" "Follow Logs" "Edit" "Editor" "Rename" "Copy" "Remove" "Clipboard"
+        "Create Service" "Select Service" "Help" "Back" "Exit")
+
+    # show service status
+    systemctl status "$service_file" | head -n 3
+
+    echo -e "${YELLOW}"
+    select option in "${options[@]}"; do
+        echo -en "${RESET}"
+        case "$option" in
+            "Help") ShowControlServiceHelp | less -SR;;
+            "Start") sudo systemctl start "$service_file";;
+            "Restart") sudo systemctl restart "$service_file";;
+            "Stop") sudo systemctl stop "$service_file";;
+            "Enable") sudo systemctl enable "$service_file";;
+            "Disable") sudo systemctl disable "$service_file";;
+            "Status") systemctl status "$service_file";;
+            "Logs") journalctl -u "$service_file";;
+            "Follow Logs") journalctl -u "$service_file" -f;;
+            "Print") systemctl cat "$service_file";;
+            "Editor") sudo bash -c "$EDITOR $service_path";;
+            "Edit") EditService "$1";;
+            "Copy") CopyMoveService "$1" "cp" && break;;
+            "Rename") CopyMoveService "$1" "mv" && break;;
+            "Clipboard") systemctl cat "$service_file" \
+                | xclip -sel clip && display_success "Service content copied to clipboard";;
+            "Remove")
+                sudo systemctl stop "$service_file" > /dev/null 2>&1
+                sudo systemctl disable "$service_file" > /dev/null 2>&1
+                sudo rm "$service_path" > /dev/null 2>&1
+                sudo systemctl daemon-reload > /dev/null 2>&1
+                display_success "Service Removed!"
+                break;;
+            "Create Service") CreateService && break;;
+            "Select Service") SelectService && break;;
+            "Back") break;;
+            "Exit") exit 0;;
+            *) display_error "Invalid Choice" 1;;
+        esac
+    done
+}
+
+function CopyMoveService {
+    local service_path="$1"
+    local service_file
+    service_file="$(basename "$service_path")"
+    local service_name=${service_file%.service}
+    local new_service_name="$service_name"
+
+    # get service name
+    while true; do
+        read -re -p "${GREEN}Enter service name: ${YELLOW}" -i "$new_service_name" new_service_name
+        # if no service exists with the same name then goto next step
+        ServiceExists "$new_service_name" || break
+        # display error and loop if service with the same name exists
+        display_error "A service with the same name exists!" 1
+    done
+
+    # copy the service with a new name
+    local new_path="${SYSD}${new_service_name}.service"
+    if sudo bash -c "$2 '$service_path' '$new_path'"; then
+        display_success "Service copied to $new_path"
+        ControlService "$new_path"
+    else
+        display_error "Failed to copy the service, Exiting..."
+    fi
+}
+
+# Returns 0 if "$1: service" exists otherwise 1
+function ServiceExists {
+    local service="$1"
+    service="$(basename "$service")"
+    service="${service%.service}"
+
+    test -f "${SYSD}${service}.service" && return 0
+    ReloadSystemD
+    LoadServices | grep -e "^${service}.service\$" > /dev/null 2>&1
+}
+
+function CreateService {
+    display_info "Create a new service"
+    local service_name=""
+
+    # get service name
+    while true; do
+        read -re -p "${GREEN}Enter service name: ${YELLOW}" -i "$service_name" service_name
+        # if no service exists with the same name then goto next step
+        ServiceExists "$service_name" || break
+        # display error and loop if service with the same name exists
+        display_error "A service with the same name exists!" 1
+    done
+
+    # get service description
+    read -p "${GREEN}Enter service description: ${YELLOW}" -r service_description
+
+    local service_content="[Unit]
+    Description=${service_description}
+
+    [Install]
+    WantedBy=multi-user.target
+    "
+
+    # generate service path
+    local service_path="${SYSD}${service_name}.service"
+    # write service content to file
+    if sudo bash -c "echo '$service_content' > $service_path"; then
+        display_success "Service file created at ${service_path}"
+        ControlService "${service_path}"
+    else
+        display_error "Failed to write service file to $service_path, Exiting..."
+    fi
+}
+
+function ReloadSystemD {
+    display_info "Reloading SystemD Daemons!!!"
     sudo systemctl daemon-reload
-    display_success "Service $service edited successfully."
+}
+
+function LoadServices {
+    systemctl list-unit-files --type=service | awk '$1 ~ ".service"{print $1}'
+}
+
+function SelectService {
+    local service=""
+
+    # reload systemd services
+    ReloadSystemD
+    # use fzf to select a service from filtered list
+    service=$(LoadServices | fzf -e --header "Select Service" --prompt "Service: ")
+
+    # check if a service was selected
+    if [ -z "$service" ]; then
+        display_error "Please select service!" 1
+        return
+    fi
+
+    # get service file path
+    service_path=$(systemctl show -p FragmentPath "$service" | cut -d'=' -f2 )
+
+    # use the selected service file path to enter control mode
+    ControlService "$service_path"
 }
 
 # Main Script
 
-while true; do
-    echo -e "${GREEN}Choose action${MAGENTA}"
-    select choice in "create service" "remove service/s" "edit service" "exit"; do
+function main {
+    PS3="${MAGENTA}Selected Action: ${YELLOW}"
+    local actions=(
+        "Create Service"
+        "Select Service"
+        "Exit"
+    )
+
+    echo -e "${GREEN}How can I help?${BLUE}"
+    select action in "${actions[@]}"; do
         echo -e "${RESET}"
-        case $choice in
-            "create service")
-                create_service
-                break
-                ;;
-            "remove service/s")
-                remove_service
-                break
-                ;;
-            "edit service")
-                edit_service
-                break
-                ;;
-            exit)
-                exit 0 ;;
-            *) display_error "Invalid choice." 1 ;;
+        case $action in
+            "Create Service") CreateService;;
+            "Select Service") SelectService;;
+            "Exit") exit 0;;
+            *) display_error "Invalid Choice" 1 ;;
         esac
     done
-done
+}
+
+# Run main function
+main
